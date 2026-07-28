@@ -2,23 +2,30 @@
 set -euo pipefail
 
 BIN_DIR="${HOME}/.local/bin"
-BIN_NAME="audio-idle-inhibit"
-BIN_PATH="${BIN_DIR}/${BIN_NAME}"
-
 SERVICE_DIR="${HOME}/.config/systemd/user"
-SERVICE_NAME="audio-idle-inhibit.service"
-SERVICE_PATH="${SERVICE_DIR}/${SERVICE_NAME}"
+
+SLEEP_BIN="audio-idle-inhibit"
+SLEEP_BIN_PATH="${BIN_DIR}/${SLEEP_BIN}"
+SLEEP_SERVICE="audio-idle-inhibit.service"
+SLEEP_SERVICE_PATH="${SERVICE_DIR}/${SLEEP_SERVICE}"
+
+SCREEN_BIN="wayland-pipewire-idle-inhibit"
+SCREEN_SERVICE="wayland-pipewire-idle-inhibit.service"
+SCREEN_SERVICE_PATH="${SERVICE_DIR}/${SCREEN_SERVICE}"
 
 SCRIPT_URL="https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/audio-idle-inhibit"
 
 mkdir -p "$BIN_DIR" "$SERVICE_DIR"
 
-curl -fsSL "$SCRIPT_URL" -o "$BIN_PATH"
-chmod +x "$BIN_PATH"
+# --- sleep inhibitor (audio-idle-inhibit) ---
 
-cat > "$SERVICE_PATH" <<'EOF'
+echo "Downloading ${SLEEP_BIN}..."
+curl -fsSL "$SCRIPT_URL" -o "$SLEEP_BIN_PATH"
+chmod +x "$SLEEP_BIN_PATH"
+
+cat > "$SLEEP_SERVICE_PATH" <<'EOF'
 [Unit]
-Description=Idle inhibit while audio is playing (Pulse/PipeWire)
+Description=Inhibit sleep while audio is playing (Pulse/PipeWire)
 After=graphical-session.target pipewire-pulse.service
 Wants=graphical-session.target pipewire-pulse.service
 
@@ -32,9 +39,58 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
-systemctl --user daemon-reload
-systemctl --user enable --now "$SERVICE_NAME"
+# --- screen-dim inhibitor (wayland-pipewire-idle-inhibit) ---
+# Uses the standard Wayland zwp_idle_inhibit_manager_v1 protocol, which is
+# supported by Gamescope (>= 3.15.14) in SteamOS Gaming Mode.
 
-echo "Installed: $BIN_PATH"
-echo "Installed: $SERVICE_PATH"
-systemctl --user --no-pager status "$SERVICE_NAME" || true
+CARGO_BIN="${HOME}/.cargo/bin/cargo"
+
+if ! command -v "$SCREEN_BIN" >/dev/null 2>&1 && \
+   ! [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
+
+    # Ensure cargo is available; install rustup into ~/.cargo if not.
+    # rustup installs entirely to ~/.cargo and ~/.rustup — no sudo required.
+    if ! command -v cargo >/dev/null 2>&1 && ! [[ -x "$CARGO_BIN" ]]; then
+        echo "cargo not found. Installing rustup (no sudo required)..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --no-modify-path
+    fi
+
+    # Source the cargo env in case rustup was just installed this session
+    # shellcheck source=/dev/null
+    [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
+
+    echo "Installing ${SCREEN_BIN} via cargo..."
+    cargo install wayland-pipewire-idle-inhibit
+fi
+
+# Resolve the binary path (cargo installs to ~/.cargo/bin by default)
+SCREEN_BIN_PATH=$(command -v "$SCREEN_BIN" 2>/dev/null \
+    || echo "${HOME}/.cargo/bin/${SCREEN_BIN}")
+
+cat > "$SCREEN_SERVICE_PATH" <<EOF
+[Unit]
+Description=Inhibit screen dimming while media plays (Wayland idle-inhibit protocol)
+After=graphical-session.target pipewire.service
+Wants=graphical-session.target pipewire.service
+
+[Service]
+Type=simple
+ExecStart=${SCREEN_BIN_PATH} --idle-inhibitor=wayland
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+
+# --- enable both services ---
+
+systemctl --user daemon-reload
+systemctl --user enable --now "$SLEEP_SERVICE"
+systemctl --user enable --now "$SCREEN_SERVICE"
+
+echo "Installed: $SLEEP_BIN_PATH"
+echo "Installed: $SLEEP_SERVICE_PATH"
+echo "Installed: $SCREEN_SERVICE_PATH"
+systemctl --user --no-pager status "$SLEEP_SERVICE" "$SCREEN_SERVICE" || true

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Inhibits system sleep while audio is playing via systemd-inhibit.
+# Screen dimming is handled by wayland-pipewire-idle-inhibit, which uses the
+# standard Wayland zwp_idle_inhibit_manager_v1 protocol supported by Gamescope.
 
 INHIBIT_PID=""
 INHIBITED=0
@@ -9,9 +12,9 @@ is_audio_playing() {
 
 start_inhibit() {
     systemd-inhibit \
-        --what=idle:sleep \
+        --what=sleep \
         --mode=block \
-        --who=audio \
+        --who=audio-idle-inhibit \
         --why="Audio playing" \
         sleep infinity &
     INHIBIT_PID=$!
