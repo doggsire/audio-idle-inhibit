@@ -19,8 +19,8 @@ chmod +x "$BIN_PATH"
 cat > "$SERVICE_PATH" <<'EOF'
 [Unit]
 Description=Idle inhibit while audio is playing (Pulse/PipeWire)
-After=graphical-session.target
-Wants=graphical-session.target
+After=graphical-session.target pipewire-pulse.service
+Wants=graphical-session.target pipewire-pulse.service
 
 [Service]
 Type=simple

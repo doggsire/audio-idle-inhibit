@@ -26,3 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/un
 
 - `pactl` (PulseAudio or PipeWire with PulseAudio compatibility)
 - `systemd-inhibit`
+
+## SteamOS / Steam Deck
+
+This works on SteamOS in both Desktop Mode and Gaming Mode. The service blocks both the `idle` and `sleep` inhibitor locks, which is necessary on the Steam Deck where the system suspends via the sleep path rather than the idle path.

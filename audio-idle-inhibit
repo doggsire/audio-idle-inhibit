@@ -9,7 +9,7 @@ is_audio_playing() {
 
 start_inhibit() {
     systemd-inhibit \
-        --what=idle \
+        --what=idle:sleep \
         --mode=block \
         --who=audio \
         --why="Audio playing" \
