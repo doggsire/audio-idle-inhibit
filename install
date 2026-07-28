@@ -9,10 +9,6 @@ SLEEP_BIN_PATH="${BIN_DIR}/${SLEEP_BIN}"
 SLEEP_SERVICE="audio-idle-inhibit.service"
 SLEEP_SERVICE_PATH="${SERVICE_DIR}/${SLEEP_SERVICE}"
 
-SCREEN_BIN="wayland-pipewire-idle-inhibit"
-SCREEN_SERVICE="wayland-pipewire-idle-inhibit.service"
-SCREEN_SERVICE_PATH="${SERVICE_DIR}/${SCREEN_SERVICE}"
-
 SCRIPT_URL="https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/audio-idle-inhibit"
 
 mkdir -p "$BIN_DIR" "$SERVICE_DIR"
@@ -39,126 +35,11 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
-# --- screen-dim inhibitor (wayland-pipewire-idle-inhibit) ---
-# Uses the standard Wayland zwp_idle_inhibit_manager_v1 protocol, which is
-# supported by Gamescope (>= 3.15.14) in SteamOS Gaming Mode.
-
-SCREEN_BIN_PATH="${BIN_DIR}/${SCREEN_BIN}"
-PREBUILT_URL="https://github.com/doggsire/audio-idle-inhibit/releases/latest/download/${SCREEN_BIN}"
-
-if ! command -v "$SCREEN_BIN" >/dev/null 2>&1 && \
-   ! [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]] && \
-   ! [[ -x "$SCREEN_BIN_PATH" ]]; then
-
-    # Try to download the pre-built binary from GitHub Releases first.
-    # This avoids needing Rust / cargo on the target machine.
-    echo "Downloading pre-built ${SCREEN_BIN}..."
-    if curl -fsSL "$PREBUILT_URL" -o "$SCREEN_BIN_PATH" 2>/dev/null; then
-        chmod +x "$SCREEN_BIN_PATH"
-        echo "Downloaded pre-built ${SCREEN_BIN}."
-    else
-        echo "Pre-built binary not available; falling back to cargo install..."
-
-        CARGO_BIN="${HOME}/.cargo/bin/cargo"
-
-        # Ensure cargo is available; install rustup into ~/.cargo if not.
-        # rustup installs entirely to ~/.cargo and ~/.rustup — no sudo required.
-        if ! command -v cargo >/dev/null 2>&1 && ! [[ -x "$CARGO_BIN" ]]; then
-            echo "cargo not found. Installing rustup (no sudo required)..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --no-modify-path
-        fi
-
-        # Source the cargo env in case rustup was just installed this session
-        # shellcheck source=/dev/null
-        [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
-
-        # cargo requires a C linker (cc) to compile Rust crates.
-        if ! command -v cc >/dev/null 2>&1; then
-            if command -v gcc >/dev/null 2>&1; then
-                echo "cc not found; symlinking gcc -> ${BIN_DIR}/cc"
-                ln -sf "$(command -v gcc)" "${BIN_DIR}/cc"
-                export PATH="${BIN_DIR}:${PATH}"
-            else
-                echo "No C linker (cc/gcc) found — attempting to install gcc..."
-                if command -v pacman >/dev/null 2>&1; then
-                    sudo steamos-readonly disable 2>/dev/null || true
-                    sudo pacman -S --noconfirm gcc
-                    sudo steamos-readonly enable 2>/dev/null || true
-                elif command -v apt-get >/dev/null 2>&1; then
-                    sudo apt-get install -y --no-install-recommends gcc
-                elif command -v dnf >/dev/null 2>&1; then
-                    sudo dnf install -y gcc
-                else
-                    echo "ERROR: No C linker found and no supported package manager detected."
-                    echo "Please install gcc (e.g. 'sudo pacman -S gcc' or 'sudo apt install gcc'),"
-                    echo "then re-run this installer."
-                    exit 1
-                fi
-            fi
-        fi
-
-        echo "Installing ${SCREEN_BIN} via cargo..."
-        cargo install wayland-pipewire-idle-inhibit
-    fi
-fi
-
-# Resolve the binary path — prefer the one we placed in BIN_DIR, then cargo's
-if command -v "$SCREEN_BIN" >/dev/null 2>&1; then
-    SCREEN_BIN_PATH=$(command -v "$SCREEN_BIN")
-elif [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
-    SCREEN_BIN_PATH="${HOME}/.cargo/bin/${SCREEN_BIN}"
-fi
-# else: keep SCREEN_BIN_PATH as ${BIN_DIR}/${SCREEN_BIN} (set above)
-
-# Write a launcher wrapper that auto-detects WAYLAND_DISPLAY if unset.
-# In SteamOS Gaming Mode, systemd user services don't inherit WAYLAND_DISPLAY
-# from the Gamescope session (socket: gamescope-0), so the binary would start
-# but silently fail to connect.  The wrapper probes common socket names so the
-# service works in both Gaming Mode and Desktop Mode without manual config.
-LAUNCHER_PATH="${BIN_DIR}/wayland-pipewire-idle-inhibit-launcher"
-cat > "$LAUNCHER_PATH" <<LAUNCHER_EOF
-#!/usr/bin/env bash
-# Auto-detect the Wayland display socket when not already set by the session
-# (needed for Gamescope / SteamOS Gaming Mode).
-if [[ -z "\${WAYLAND_DISPLAY:-}" ]]; then
-    _runtime="\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}"
-    for _sock in gamescope-0 wayland-0 wayland-1; do
-        if [[ -S "\${_runtime}/\${_sock}" ]]; then
-            export WAYLAND_DISPLAY="\${_sock}"
-            break
-        fi
-    done
-fi
-exec ${SCREEN_BIN_PATH} --idle-inhibitor=wayland
-LAUNCHER_EOF
-chmod +x "$LAUNCHER_PATH"
-
-cat > "$SCREEN_SERVICE_PATH" <<EOF
-[Unit]
-Description=Inhibit screen dimming while media plays (Wayland idle-inhibit protocol)
-After=graphical-session.target pipewire.service
-Wants=graphical-session.target pipewire.service
-
-[Service]
-Type=simple
-ExecStart=${LAUNCHER_PATH}
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=default.target
-EOF
-
-# --- enable both services ---
+# --- enable service ---
 
 systemctl --user daemon-reload
 systemctl --user enable --now "$SLEEP_SERVICE"
-systemctl --user enable --now "$SCREEN_SERVICE"
 
 echo "Installed: $SLEEP_BIN_PATH"
 echo "Installed: $SLEEP_SERVICE_PATH"
-echo "Installed: $SCREEN_BIN_PATH"
-echo "Installed: $LAUNCHER_PATH"
-echo "Installed: $SCREEN_SERVICE_PATH"
-systemctl --user --no-pager status "$SLEEP_SERVICE" "$SCREEN_SERVICE" || true
+systemctl --user --no-pager status "$SLEEP_SERVICE" || true

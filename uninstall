@@ -7,33 +7,11 @@ SLEEP_SERVICE="audio-idle-inhibit.service"
 SLEEP_SERVICE_PATH="${SERVICE_DIR}/${SLEEP_SERVICE}"
 SLEEP_BIN_PATH="${HOME}/.local/bin/audio-idle-inhibit"
 
-SCREEN_SERVICE="wayland-pipewire-idle-inhibit.service"
-SCREEN_SERVICE_PATH="${SERVICE_DIR}/${SCREEN_SERVICE}"
-SCREEN_BIN_PATH="${HOME}/.cargo/bin/wayland-pipewire-idle-inhibit"
-SCREEN_BIN_LOCAL_PATH="${HOME}/.local/bin/wayland-pipewire-idle-inhibit"
-LAUNCHER_PATH="${HOME}/.local/bin/wayland-pipewire-idle-inhibit-launcher"
-
 systemctl --user disable --now "$SLEEP_SERVICE" 2>/dev/null || true
-systemctl --user disable --now "$SCREEN_SERVICE" 2>/dev/null || true
 
 rm -f "$SLEEP_SERVICE_PATH" "$SLEEP_BIN_PATH"
-rm -f "$SCREEN_SERVICE_PATH" "$LAUNCHER_PATH"
-
-# Only remove the wayland-pipewire-idle-inhibit binary if it lives in the
-# local bin or cargo bin dir (i.e. was installed by our install script), not
-# if it was installed system-wide by a package manager.
-if [[ -f "$SCREEN_BIN_LOCAL_PATH" ]]; then
-    rm -f "$SCREEN_BIN_LOCAL_PATH"
-    echo "Uninstalled: $SCREEN_BIN_LOCAL_PATH"
-fi
-if [[ -f "$SCREEN_BIN_PATH" ]]; then
-    rm -f "$SCREEN_BIN_PATH"
-    echo "Uninstalled: $SCREEN_BIN_PATH"
-fi
 
 systemctl --user daemon-reload
 
 echo "Uninstalled: $SLEEP_SERVICE_PATH"
 echo "Uninstalled: $SLEEP_BIN_PATH"
-echo "Uninstalled: $SCREEN_SERVICE_PATH"
-echo "Uninstalled: $LAUNCHER_PATH"
