@@ -19,10 +19,13 @@ curl -fsSL https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/in
 This installs:
 - `~/.local/bin/audio-idle-inhibit` — the sleep-inhibit polling script
 - `~/.config/systemd/user/audio-idle-inhibit.service` — systemd unit for sleep inhibition
-- `~/.cargo/bin/wayland-pipewire-idle-inhibit` — screen-dim inhibitor (installed via `cargo`)
+- `~/.local/bin/wayland-pipewire-idle-inhibit` — screen-dim inhibitor (pre-built binary)
 - `~/.config/systemd/user/wayland-pipewire-idle-inhibit.service` — systemd unit for screen-dim inhibition
 
-If `cargo` is not available the install script will automatically install `rustup` into `~/.cargo` (no sudo required), then build and install `wayland-pipewire-idle-inhibit`.
+The install script downloads a pre-built `wayland-pipewire-idle-inhibit` binary directly from
+this repo's [GitHub Releases](https://github.com/doggsire/audio-idle-inhibit/releases/latest),
+so no Rust or `cargo` is required. If the pre-built binary is unavailable it falls back to
+`cargo install` automatically.
 
 ## Uninstall
 
@@ -34,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/un
 
 - `pactl` (PulseAudio or PipeWire with PulseAudio compatibility)
 - `systemd-inhibit`
-- `cargo` — if not present, the install script automatically installs `rustup` into `~/.cargo` (no sudo required)
+- `curl`
 
 ## SteamOS / Steam Deck
 
