@@ -2,6 +2,7 @@
 
 INHIBIT_PID=""
 INHIBITED=0
+SCREENSAVER_COOKIE=""
 
 is_audio_playing() {
     pactl list short sink-inputs 2>/dev/null | awk 'NF{c++} END{exit (c>0 ? 0 : 1)}'
@@ -15,6 +16,11 @@ start_inhibit() {
         --why="Audio playing" \
         sleep infinity &
     INHIBIT_PID=$!
+    SCREENSAVER_COOKIE=$(dbus-send --session --dest=org.freedesktop.ScreenSaver \
+        --type=method_call --print-reply \
+        /org/freedesktop/ScreenSaver org.freedesktop.ScreenSaver.Inhibit \
+        string:"audio-idle-inhibit" string:"Audio playing" 2>/dev/null \
+        | awk '/uint32/ {print $2}')
     INHIBITED=1
 }
 
@@ -23,7 +29,14 @@ stop_inhibit() {
         kill "$INHIBIT_PID" 2>/dev/null || true
         wait "$INHIBIT_PID" 2>/dev/null || true
     fi
+    if [[ -n "$SCREENSAVER_COOKIE" ]]; then
+        dbus-send --session --dest=org.freedesktop.ScreenSaver \
+            --type=method_call \
+            /org/freedesktop/ScreenSaver org.freedesktop.ScreenSaver.UnInhibit \
+            uint32:"$SCREENSAVER_COOKIE" 2>/dev/null || true
+    fi
     INHIBIT_PID=""
+    SCREENSAVER_COOKIE=""
     INHIBITED=0
 }
 
