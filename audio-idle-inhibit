@@ -1,36 +1,24 @@
 #!/usr/bin/env bash
+# Inhibits system sleep while audio is playing via systemd-inhibit.
+# Screen dimming is handled by wayland-pipewire-idle-inhibit, which uses the
+# standard Wayland zwp_idle_inhibit_manager_v1 protocol supported by Gamescope.
 
 INHIBIT_PID=""
 INHIBITED=0
-NUDGE_COUNTER=0
-NUDGE_INTERVAL=30
 
 is_audio_playing() {
     pactl list short sink-inputs 2>/dev/null | awk 'NF{c++} END{exit (c>0 ? 0 : 1)}'
 }
 
-# Gamescope (SteamOS Gaming Mode) does not respect systemd idle inhibitors for
-# screen dimming. Injecting a 1-pixel mouse nudge resets its own idle timer.
-# In games raw input mode is active so the X cursor position is irrelevant;
-# in menus the 1-pixel snap-back is imperceptible.
-nudge_display() {
-    if command -v xdotool >/dev/null 2>&1; then
-        xdotool mousemove_relative -- 1 0
-        xdotool mousemove_relative -- -1 0
-    fi
-}
-
 start_inhibit() {
     systemd-inhibit \
-        --what=idle:sleep \
+        --what=sleep \
         --mode=block \
-        --who=audio \
+        --who=audio-idle-inhibit \
         --why="Audio playing" \
         sleep infinity &
     INHIBIT_PID=$!
     INHIBITED=1
-    nudge_display
-    NUDGE_COUNTER=0
 }
 
 stop_inhibit() {
@@ -40,17 +28,11 @@ stop_inhibit() {
     fi
     INHIBIT_PID=""
     INHIBITED=0
-    NUDGE_COUNTER=0
 }
 
 while true; do
     if is_audio_playing; then
         [[ $INHIBITED -eq 0 ]] && start_inhibit
-        NUDGE_COUNTER=$((NUDGE_COUNTER + 1))
-        if [[ $NUDGE_COUNTER -ge $NUDGE_INTERVAL ]]; then
-            nudge_display
-            NUDGE_COUNTER=0
-        fi
     else
         [[ $INHIBITED -eq 1 ]] && stop_inhibit
     fi
