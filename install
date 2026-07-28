@@ -60,6 +60,34 @@ if ! command -v "$SCREEN_BIN" >/dev/null 2>&1 && \
     # shellcheck source=/dev/null
     [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
 
+    # cargo requires a C linker (cc) to compile Rust crates.
+    # If cc is absent but gcc is present, expose it as cc via a symlink in
+    # ~/.local/bin (which is already on PATH from the script's BIN_DIR setup).
+    # Otherwise attempt a system-level install, or bail with clear guidance.
+    if ! command -v cc >/dev/null 2>&1; then
+        if command -v gcc >/dev/null 2>&1; then
+            echo "cc not found; symlinking gcc -> ${BIN_DIR}/cc"
+            ln -sf "$(command -v gcc)" "${BIN_DIR}/cc"
+            export PATH="${BIN_DIR}:${PATH}"
+        else
+            echo "No C linker (cc/gcc) found — attempting to install gcc..."
+            if command -v pacman >/dev/null 2>&1; then
+                sudo steamos-readonly disable 2>/dev/null || true
+                sudo pacman -S --noconfirm gcc
+                sudo steamos-readonly enable 2>/dev/null || true
+            elif command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get install -y --no-install-recommends gcc
+            elif command -v dnf >/dev/null 2>&1; then
+                sudo dnf install -y gcc
+            else
+                echo "ERROR: No C linker found and no supported package manager detected."
+                echo "Please install gcc (e.g. 'sudo pacman -S gcc' or 'sudo apt install gcc'),"
+                echo "then re-run this installer."
+                exit 1
+            fi
+        fi
+    fi
+
     echo "Installing ${SCREEN_BIN} via cargo..."
     cargo install wayland-pipewire-idle-inhibit
 fi
