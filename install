@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE_DIR="${HOME}/.config/systemd/user"
+SERVICE_NAME="audio-idle-inhibit.service"
+SERVICE_PATH="${SERVICE_DIR}/${SERVICE_NAME}"
+
+mkdir -p "$SERVICE_DIR"
+
+cat > "$SERVICE_PATH" <<'EOF'
+[Unit]
+Description=Idle inhibit while audio is playing (Pulse/PipeWire)
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -lc '
+INHIBIT_PID="";
+INHIBITED=0;
+
+is_audio_playing() {
+  pactl list short sink-inputs 2>/dev/null | awk "NF{c++} END{exit (c>0 ? 0 : 1)}"
+}
+
+start_inhibit() {
+  systemd-inhibit --what=idle --mode=block --who=audio --why="Audio playing" sleep infinity &
+  INHIBIT_PID=$!;
+  INHIBITED=1;
+}
+
+stop_inhibit() {
+  if [[ -n "${INHIBIT_PID}" ]]; then
+    kill "${INHIBIT_PID}" 2>/dev/null || true
+    wait "${INHIBIT_PID}" 2>/dev/null || true
+  fi
+  INHIBIT_PID="";
+  INHIBITED=0;
+}
+
+while true; do
+  if is_audio_playing; then
+    [[ $INHIBITED -eq 0 ]] && start_inhibit
+  else
+    [[ $INHIBITED -eq 1 ]] && stop_inhibit
+  fi
+  sleep 1
+done'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now "$SERVICE_NAME"
+
+echo "Installed: $SERVICE_PATH"
+systemctl --user --no-pager status "$SERVICE_NAME" || true
