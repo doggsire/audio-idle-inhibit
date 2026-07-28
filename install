@@ -43,16 +43,25 @@ EOF
 # Uses the standard Wayland zwp_idle_inhibit_manager_v1 protocol, which is
 # supported by Gamescope (>= 3.15.14) in SteamOS Gaming Mode.
 
+CARGO_BIN="${HOME}/.cargo/bin/cargo"
+
 if ! command -v "$SCREEN_BIN" >/dev/null 2>&1 && \
    ! [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
-    if command -v cargo >/dev/null 2>&1; then
-        echo "Installing ${SCREEN_BIN} via cargo..."
-        cargo install wayland-pipewire-idle-inhibit
-    else
-        echo "WARNING: cargo not found. Install ${SCREEN_BIN} manually:" >&2
-        echo "  cargo install wayland-pipewire-idle-inhibit" >&2
-        echo "  (or from your distro's package manager)" >&2
+
+    # Ensure cargo is available; install rustup into ~/.cargo if not.
+    # rustup installs entirely to ~/.cargo and ~/.rustup — no sudo required.
+    if ! command -v cargo >/dev/null 2>&1 && ! [[ -x "$CARGO_BIN" ]]; then
+        echo "cargo not found. Installing rustup (no sudo required)..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --no-modify-path
     fi
+
+    # Source the cargo env in case rustup was just installed this session
+    # shellcheck source=/dev/null
+    [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
+
+    echo "Installing ${SCREEN_BIN} via cargo..."
+    cargo install wayland-pipewire-idle-inhibit
 fi
 
 # Resolve the binary path (cargo installs to ~/.cargo/bin by default)

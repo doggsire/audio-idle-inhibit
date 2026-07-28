@@ -22,7 +22,7 @@ This installs:
 - `~/.cargo/bin/wayland-pipewire-idle-inhibit` — screen-dim inhibitor (installed via `cargo`)
 - `~/.config/systemd/user/wayland-pipewire-idle-inhibit.service` — systemd unit for screen-dim inhibition
 
-If `cargo` is not available the install script will warn and skip `wayland-pipewire-idle-inhibit`; you can install it separately via your package manager and then run `systemctl --user enable --now wayland-pipewire-idle-inhibit.service`.
+If `cargo` is not available the install script will automatically install `rustup` into `~/.cargo` (no sudo required), then build and install `wayland-pipewire-idle-inhibit`.
 
 ## Uninstall
 
@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/un
 
 - `pactl` (PulseAudio or PipeWire with PulseAudio compatibility)
 - `systemd-inhibit`
-- `cargo` (to install `wayland-pipewire-idle-inhibit`) — or install it from your distro's package manager
+- `cargo` — if not present, the install script automatically installs `rustup` into `~/.cargo` (no sudo required)
 
 ## SteamOS / Steam Deck
 
