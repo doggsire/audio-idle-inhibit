@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+BIN_DIR="${HOME}/.local/bin"
+BIN_NAME="audio-idle-inhibit"
+BIN_PATH="${BIN_DIR}/${BIN_NAME}"
+
 SERVICE_DIR="${HOME}/.config/systemd/user"
 SERVICE_NAME="audio-idle-inhibit.service"
 SERVICE_PATH="${SERVICE_DIR}/${SERVICE_NAME}"
 
-mkdir -p "$SERVICE_DIR"
+SCRIPT_URL="https://raw.githubusercontent.com/doggsire/audio-idle-inhibit/main/audio-idle-inhibit"
+
+mkdir -p "$BIN_DIR" "$SERVICE_DIR"
+
+curl -fsSL "$SCRIPT_URL" -o "$BIN_PATH"
+chmod +x "$BIN_PATH"
 
 cat > "$SERVICE_PATH" <<'EOF'
 [Unit]
@@ -15,37 +24,7 @@ Wants=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -lc '
-INHIBIT_PID="";
-INHIBITED=0;
-
-is_audio_playing() {
-  pactl list short sink-inputs 2>/dev/null | awk "NF{c++} END{exit (c>0 ? 0 : 1)}"
-}
-
-start_inhibit() {
-  systemd-inhibit --what=idle --mode=block --who=audio --why="Audio playing" sleep infinity &
-  INHIBIT_PID=$!;
-  INHIBITED=1;
-}
-
-stop_inhibit() {
-  if [[ -n "${INHIBIT_PID}" ]]; then
-    kill "${INHIBIT_PID}" 2>/dev/null || true
-    wait "${INHIBIT_PID}" 2>/dev/null || true
-  fi
-  INHIBIT_PID="";
-  INHIBITED=0;
-}
-
-while true; do
-  if is_audio_playing; then
-    [[ $INHIBITED -eq 0 ]] && start_inhibit
-  else
-    [[ $INHIBITED -eq 1 ]] && stop_inhibit
-  fi
-  sleep 1
-done'
+ExecStart=%h/.local/bin/audio-idle-inhibit
 Restart=always
 RestartSec=2
 
@@ -56,5 +35,6 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable --now "$SERVICE_NAME"
 
+echo "Installed: $BIN_PATH"
 echo "Installed: $SERVICE_PATH"
 systemctl --user --no-pager status "$SERVICE_NAME" || true
