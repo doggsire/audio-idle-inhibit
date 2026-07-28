@@ -3,9 +3,11 @@ set -euo pipefail
 
 SERVICE_NAME="audio-idle-inhibit.service"
 SERVICE_PATH="${HOME}/.config/systemd/user/${SERVICE_NAME}"
+BIN_PATH="${HOME}/.local/bin/audio-idle-inhibit"
 
 systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
-rm -f "$SERVICE_PATH"
+rm -f "$SERVICE_PATH" "$BIN_PATH"
 systemctl --user daemon-reload
 
 echo "Uninstalled: $SERVICE_PATH"
+echo "Uninstalled: $BIN_PATH"
