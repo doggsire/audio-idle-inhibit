@@ -2,10 +2,22 @@
 
 INHIBIT_PID=""
 INHIBITED=0
-SCREENSAVER_COOKIE=""
+NUDGE_COUNTER=0
+NUDGE_INTERVAL=30
 
 is_audio_playing() {
     pactl list short sink-inputs 2>/dev/null | awk 'NF{c++} END{exit (c>0 ? 0 : 1)}'
+}
+
+# Gamescope (SteamOS Gaming Mode) does not respect systemd idle inhibitors for
+# screen dimming. Injecting a 1-pixel mouse nudge resets its own idle timer.
+# In games raw input mode is active so the X cursor position is irrelevant;
+# in menus the 1-pixel snap-back is imperceptible.
+nudge_display() {
+    if command -v xdotool >/dev/null 2>&1; then
+        xdotool mousemove_relative -- 1 0
+        xdotool mousemove_relative -- -1 0
+    fi
 }
 
 start_inhibit() {
@@ -16,12 +28,9 @@ start_inhibit() {
         --why="Audio playing" \
         sleep infinity &
     INHIBIT_PID=$!
-    SCREENSAVER_COOKIE=$(dbus-send --session --dest=org.freedesktop.ScreenSaver \
-        --type=method_call --print-reply \
-        /org/freedesktop/ScreenSaver org.freedesktop.ScreenSaver.Inhibit \
-        string:"audio-idle-inhibit" string:"Audio playing" 2>/dev/null \
-        | awk '/uint32/ {print $2}')
     INHIBITED=1
+    nudge_display
+    NUDGE_COUNTER=0
 }
 
 stop_inhibit() {
@@ -29,20 +38,19 @@ stop_inhibit() {
         kill "$INHIBIT_PID" 2>/dev/null || true
         wait "$INHIBIT_PID" 2>/dev/null || true
     fi
-    if [[ -n "$SCREENSAVER_COOKIE" ]]; then
-        dbus-send --session --dest=org.freedesktop.ScreenSaver \
-            --type=method_call \
-            /org/freedesktop/ScreenSaver org.freedesktop.ScreenSaver.UnInhibit \
-            uint32:"$SCREENSAVER_COOKIE" 2>/dev/null || true
-    fi
     INHIBIT_PID=""
-    SCREENSAVER_COOKIE=""
     INHIBITED=0
+    NUDGE_COUNTER=0
 }
 
 while true; do
     if is_audio_playing; then
         [[ $INHIBITED -eq 0 ]] && start_inhibit
+        NUDGE_COUNTER=$((NUDGE_COUNTER + 1))
+        if [[ $NUDGE_COUNTER -ge $NUDGE_INTERVAL ]]; then
+            nudge_display
+            NUDGE_COUNTER=0
+        fi
     else
         [[ $INHIBITED -eq 1 ]] && stop_inhibit
     fi
