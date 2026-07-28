@@ -43,58 +43,73 @@ EOF
 # Uses the standard Wayland zwp_idle_inhibit_manager_v1 protocol, which is
 # supported by Gamescope (>= 3.15.14) in SteamOS Gaming Mode.
 
-CARGO_BIN="${HOME}/.cargo/bin/cargo"
+SCREEN_BIN_PATH="${BIN_DIR}/${SCREEN_BIN}"
+PREBUILT_URL="https://github.com/doggsire/audio-idle-inhibit/releases/latest/download/${SCREEN_BIN}"
 
 if ! command -v "$SCREEN_BIN" >/dev/null 2>&1 && \
-   ! [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
+   ! [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]] && \
+   ! [[ -x "$SCREEN_BIN_PATH" ]]; then
 
-    # Ensure cargo is available; install rustup into ~/.cargo if not.
-    # rustup installs entirely to ~/.cargo and ~/.rustup — no sudo required.
-    if ! command -v cargo >/dev/null 2>&1 && ! [[ -x "$CARGO_BIN" ]]; then
-        echo "cargo not found. Installing rustup (no sudo required)..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --no-modify-path
-    fi
+    # Try to download the pre-built binary from GitHub Releases first.
+    # This avoids needing Rust / cargo on the target machine.
+    echo "Downloading pre-built ${SCREEN_BIN}..."
+    if curl -fsSL "$PREBUILT_URL" -o "$SCREEN_BIN_PATH" 2>/dev/null; then
+        chmod +x "$SCREEN_BIN_PATH"
+        echo "Downloaded pre-built ${SCREEN_BIN}."
+    else
+        echo "Pre-built binary not available; falling back to cargo install..."
 
-    # Source the cargo env in case rustup was just installed this session
-    # shellcheck source=/dev/null
-    [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
+        CARGO_BIN="${HOME}/.cargo/bin/cargo"
 
-    # cargo requires a C linker (cc) to compile Rust crates.
-    # If cc is absent but gcc is present, expose it as cc via a symlink in
-    # ~/.local/bin (which is already on PATH from the script's BIN_DIR setup).
-    # Otherwise attempt a system-level install, or bail with clear guidance.
-    if ! command -v cc >/dev/null 2>&1; then
-        if command -v gcc >/dev/null 2>&1; then
-            echo "cc not found; symlinking gcc -> ${BIN_DIR}/cc"
-            ln -sf "$(command -v gcc)" "${BIN_DIR}/cc"
-            export PATH="${BIN_DIR}:${PATH}"
-        else
-            echo "No C linker (cc/gcc) found — attempting to install gcc..."
-            if command -v pacman >/dev/null 2>&1; then
-                sudo steamos-readonly disable 2>/dev/null || true
-                sudo pacman -S --noconfirm gcc
-                sudo steamos-readonly enable 2>/dev/null || true
-            elif command -v apt-get >/dev/null 2>&1; then
-                sudo apt-get install -y --no-install-recommends gcc
-            elif command -v dnf >/dev/null 2>&1; then
-                sudo dnf install -y gcc
+        # Ensure cargo is available; install rustup into ~/.cargo if not.
+        # rustup installs entirely to ~/.cargo and ~/.rustup — no sudo required.
+        if ! command -v cargo >/dev/null 2>&1 && ! [[ -x "$CARGO_BIN" ]]; then
+            echo "cargo not found. Installing rustup (no sudo required)..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --no-modify-path
+        fi
+
+        # Source the cargo env in case rustup was just installed this session
+        # shellcheck source=/dev/null
+        [[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
+
+        # cargo requires a C linker (cc) to compile Rust crates.
+        if ! command -v cc >/dev/null 2>&1; then
+            if command -v gcc >/dev/null 2>&1; then
+                echo "cc not found; symlinking gcc -> ${BIN_DIR}/cc"
+                ln -sf "$(command -v gcc)" "${BIN_DIR}/cc"
+                export PATH="${BIN_DIR}:${PATH}"
             else
-                echo "ERROR: No C linker found and no supported package manager detected."
-                echo "Please install gcc (e.g. 'sudo pacman -S gcc' or 'sudo apt install gcc'),"
-                echo "then re-run this installer."
-                exit 1
+                echo "No C linker (cc/gcc) found — attempting to install gcc..."
+                if command -v pacman >/dev/null 2>&1; then
+                    sudo steamos-readonly disable 2>/dev/null || true
+                    sudo pacman -S --noconfirm gcc
+                    sudo steamos-readonly enable 2>/dev/null || true
+                elif command -v apt-get >/dev/null 2>&1; then
+                    sudo apt-get install -y --no-install-recommends gcc
+                elif command -v dnf >/dev/null 2>&1; then
+                    sudo dnf install -y gcc
+                else
+                    echo "ERROR: No C linker found and no supported package manager detected."
+                    echo "Please install gcc (e.g. 'sudo pacman -S gcc' or 'sudo apt install gcc'),"
+                    echo "then re-run this installer."
+                    exit 1
+                fi
             fi
         fi
-    fi
 
-    echo "Installing ${SCREEN_BIN} via cargo..."
-    cargo install wayland-pipewire-idle-inhibit
+        echo "Installing ${SCREEN_BIN} via cargo..."
+        cargo install wayland-pipewire-idle-inhibit
+    fi
 fi
 
-# Resolve the binary path (cargo installs to ~/.cargo/bin by default)
-SCREEN_BIN_PATH=$(command -v "$SCREEN_BIN" 2>/dev/null \
-    || echo "${HOME}/.cargo/bin/${SCREEN_BIN}")
+# Resolve the binary path — prefer the one we placed in BIN_DIR, then cargo's
+if command -v "$SCREEN_BIN" >/dev/null 2>&1; then
+    SCREEN_BIN_PATH=$(command -v "$SCREEN_BIN")
+elif [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
+    SCREEN_BIN_PATH="${HOME}/.cargo/bin/${SCREEN_BIN}"
+fi
+# else: keep SCREEN_BIN_PATH as ${BIN_DIR}/${SCREEN_BIN} (set above)
 
 cat > "$SCREEN_SERVICE_PATH" <<EOF
 [Unit]
