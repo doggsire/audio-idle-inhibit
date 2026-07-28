@@ -111,6 +111,29 @@ elif [[ -x "${HOME}/.cargo/bin/${SCREEN_BIN}" ]]; then
 fi
 # else: keep SCREEN_BIN_PATH as ${BIN_DIR}/${SCREEN_BIN} (set above)
 
+# Write a launcher wrapper that auto-detects WAYLAND_DISPLAY if unset.
+# In SteamOS Gaming Mode, systemd user services don't inherit WAYLAND_DISPLAY
+# from the Gamescope session (socket: gamescope-0), so the binary would start
+# but silently fail to connect.  The wrapper probes common socket names so the
+# service works in both Gaming Mode and Desktop Mode without manual config.
+LAUNCHER_PATH="${BIN_DIR}/wayland-pipewire-idle-inhibit-launcher"
+cat > "$LAUNCHER_PATH" <<LAUNCHER_EOF
+#!/usr/bin/env bash
+# Auto-detect the Wayland display socket when not already set by the session
+# (needed for Gamescope / SteamOS Gaming Mode).
+if [[ -z "\${WAYLAND_DISPLAY:-}" ]]; then
+    _runtime="\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}"
+    for _sock in gamescope-0 wayland-0 wayland-1; do
+        if [[ -S "\${_runtime}/\${_sock}" ]]; then
+            export WAYLAND_DISPLAY="\${_sock}"
+            break
+        fi
+    done
+fi
+exec ${SCREEN_BIN_PATH} --idle-inhibitor=wayland
+LAUNCHER_EOF
+chmod +x "$LAUNCHER_PATH"
+
 cat > "$SCREEN_SERVICE_PATH" <<EOF
 [Unit]
 Description=Inhibit screen dimming while media plays (Wayland idle-inhibit protocol)
@@ -119,7 +142,7 @@ Wants=graphical-session.target pipewire.service
 
 [Service]
 Type=simple
-ExecStart=${SCREEN_BIN_PATH} --idle-inhibitor=wayland
+ExecStart=${LAUNCHER_PATH}
 Restart=always
 RestartSec=2
 
@@ -135,5 +158,7 @@ systemctl --user enable --now "$SCREEN_SERVICE"
 
 echo "Installed: $SLEEP_BIN_PATH"
 echo "Installed: $SLEEP_SERVICE_PATH"
+echo "Installed: $SCREEN_BIN_PATH"
+echo "Installed: $LAUNCHER_PATH"
 echo "Installed: $SCREEN_SERVICE_PATH"
 systemctl --user --no-pager status "$SLEEP_SERVICE" "$SCREEN_SERVICE" || true
